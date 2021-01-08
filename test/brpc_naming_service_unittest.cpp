@@ -581,10 +581,8 @@ public:
         brpc::Controller* cntl = static_cast<brpc::Controller*>(cntl_base);
         auto body = cntl->request_attachment().to_string();
         for (brpc::QuerySplitter sp(body); sp; ++sp) {
-            if (!sp.key().empty()) {
-                if (sp.key() == "addrs") {
-                    _addrs.insert(sp.value().as_string());
-                }
+            if (sp.key() == "addrs") {
+                _addrs.insert(sp.value().as_string());
             }
         }
         cntl->response_attachment().append(R"({
@@ -629,6 +627,7 @@ public:
     bool HasAddr(const std::string& addr) const {
         return _addrs.find(addr) != _addrs.end();
     }
+    int AddrCount() const { return _addrs.size(); }
 
 private:
     int _renew_count;
@@ -687,12 +686,14 @@ TEST(NamingServiceTest, discovery_sanity) {
     ASSERT_FALSE(svc.HasAddr("http://10.0.0.1:8000"));
 
     // addrs splitted by `,'
-    dparam.addrs = ("grpc://10.0.0.1:8000,http://10.0.0.1:8000");
+    dparam.addrs = ",grpc://10.0.0.1:8000,,http://10.0.0.1:8000,";
     {
         brpc::policy::DiscoveryClient dc;
         ASSERT_EQ(0, dc.Register(dparam));
         ASSERT_TRUE(svc.HasAddr("grpc://10.0.0.1:8000"));
         ASSERT_TRUE(svc.HasAddr("http://10.0.0.1:8000"));
+        ASSERT_FALSE(svc.HasAddr(std::string()));
+        ASSERT_EQ(2, svc.AddrCount());
     }
 }
 
