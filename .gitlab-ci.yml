@@ -1,0 +1,90 @@
+# GitLab CI/CD script for mrps
+include:
+  - project: tools/gitlab-ci-template
+    file: /global-variables.yml
+    ref: v2.0.4
+  - project: tools/gitlab-ci-template
+    file: /artifactory.yml
+    ref: v2.0.4
+  - project: tools/gitlab-ci-template
+    ref: v2.0.4
+    file: /workflow.yml
+  - project: tools/gitlab-ci-template
+    ref: v2.0.4
+    file: /rules.yml
+  - project: tools/gitlab-ci-template
+    file: /ky3.yml
+    ref: v2.0.4
+
+variables:
+  extends: .global-variables
+  extends: .artifactory-variables
+
+stages:
+  - prepare
+  - build
+  - deploy
+
+build:ky3-src:
+  stage: prepare
+  extends:
+    - .rules-for-tags-and-default-release-branches
+    - .ky3-3.3
+    - .ky3-build-src
+  script:
+    - mkdir -p ${TOPDIR}/SOURCES
+    - git archive --format=tar.gz --prefix=incubator-brpc-${PKG_VERSION}/ --output ${TOPDIR}/SOURCES/incubator-brpc-${PKG_VERSION}.tar.gz HEAD
+  needs: []
+
+.build:ky3:
+  stage: build
+  needs: ["build:ky3-src"]
+  extends:
+    - .rules-for-tags-and-default-release-branches
+    - .ky3-build-rpm
+  artifacts:
+    name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME"
+    expire_in: 1 day
+    paths:
+      - package/**/*.rpm
+  dependencies:
+    - build:ky3-src
+
+build:ky3-3.2-x86_64:
+  image: registry.bqvision.com/ky3:3.2-brpc-dev-20210109
+  extends:
+    - .ky3-3.2
+    - .build:ky3
+  variables:
+    TARGET: x86_64
+
+build:ky3-3.3-x86_64:
+  image: registry.bqvision.com/ky3:3.3-brpc-dev-20210108
+  extends:
+    - .ky3-3.3
+    - .build:ky3
+  variables:
+    TARGET: x86_64
+
+.deploy:ky3:
+  stage: deploy
+  extends:
+    - .ky3-deploy-rpm
+  rules:
+    - when: manual
+
+deploy:ky3-3.2:
+  extends:
+    - .ky3-3.2
+    - .deploy:ky3
+  needs: ["build:ky3-3.2-x86_64"]
+  dependencies:
+    - build:ky3-3.2-x86_64
+
+deploy:ky3-3.3:
+  extends:
+    - .ky3-3.3
+    - .deploy:ky3
+  needs: ["build:ky3-3.3-x86_64"]
+  dependencies:
+    - build:ky3-3.3-x86_64
